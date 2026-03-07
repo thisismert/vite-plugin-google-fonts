@@ -7,8 +7,10 @@ const USER_AGENT =
     'AppleWebKit/537.36 (KHTML, like Gecko) ' +
     'Chrome/126.0.0.0 Safari/537.36'
 
+const MAX_REDIRECTS = 5
+
 // Simple GET request returning a Buffer.
-function fetchBuffer(url: string, timeout = 15_000): Promise<Buffer> {
+function fetchBuffer(url: string, timeout = 15_000, redirectCount = 0): Promise<Buffer> {
     return new Promise((resolve, reject) => {
         const { protocol } = new URL(url)
         const client = protocol === 'https:' ? https : http
@@ -21,7 +23,13 @@ function fetchBuffer(url: string, timeout = 15_000): Promise<Buffer> {
             (res) => {
                 // Follow redirects
                 if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                    fetchBuffer(res.headers.location, timeout).then(resolve, reject)
+                    if (redirectCount >= MAX_REDIRECTS) {
+                        reject(new Error(`Too many redirects while fetching: ${url}`))
+                        return
+                    }
+
+                    const nextUrl = new URL(res.headers.location, url).toString()
+                    fetchBuffer(nextUrl, timeout, redirectCount + 1).then(resolve, reject)
                     return
                 }
 
@@ -208,9 +216,12 @@ export function extractFontFileUrls(css: string): FontFileInfo[] {
             continue
         }
 
-        const urlMatch = /src:\s*url\(([^)]+)\)/.exec(line)
-        if (urlMatch) {
-            const url = urlMatch[1]
+        for (const urlMatch of line.matchAll(/url\(([^)]+)\)/g)) {
+            const url = urlMatch[1].trim().replace(/^['"]|['"]$/g, '')
+            if (!url || url.startsWith('data:')) {
+                continue
+            }
+
             if (!files.some((f) => f.url === url)) {
                 files.push({ url, subset: currentSubset })
             }

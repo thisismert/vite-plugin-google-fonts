@@ -11,6 +11,7 @@ import {
 } from './fetch.js'
 
 export const DEFAULT_CACHE_DIR = 'node_modules/.google-fonts'
+export const DEFAULT_FONT_BASE_DIR = 'fonts'
 
 interface ResolvedFamily {
     family: string
@@ -54,6 +55,24 @@ export function toSlug(family: string): string {
 
 function normalizeFamilyName(family: string): string {
     return family.trim().replace(/[ _]+/g, ' ')
+}
+
+export function resolveFontBaseDir(base?: string): string {
+    const normalized = (base ?? DEFAULT_FONT_BASE_DIR)
+        .trim()
+        .replace(/\\/g, '/')
+        .replace(/^\/+|\/+$/g, '')
+
+    if (!normalized || normalized === '.') {
+        return DEFAULT_FONT_BASE_DIR
+    }
+
+    const segments = normalized.split('/')
+    if (segments.some((segment) => segment === '' || segment === '..')) {
+        throw new Error(`Invalid font base directory: ${base}`)
+    }
+
+    return normalized
 }
 
 // Short content hash for file names
@@ -132,6 +151,37 @@ function extractReferencedLocalFiles(css: string): string[] {
     return [...fileNames]
 }
 
+function hasAllCachedFiles(fontsDir: string, files: string[]): boolean {
+    return files.every((file) => fs.existsSync(path.join(fontsDir, file)))
+}
+
+function pruneFamilyCacheFiles(
+    fontsDir: string,
+    slug: string,
+    keepFiles: string[],
+): void {
+    const keep = new Set(keepFiles)
+    let entries: string[] = []
+
+    try {
+        entries = fs.readdirSync(fontsDir)
+    } catch {
+        return
+    }
+
+    for (const entry of entries) {
+        if (!entry.startsWith(`${slug}-`) || keep.has(entry)) {
+            continue
+        }
+
+        try {
+            fs.unlinkSync(path.join(fontsDir, entry))
+        } catch {
+            // Best-effort cleanup only.
+        }
+    }
+}
+
 function resolveFamily(
     family: string,
     config?: FontFamilyOptions,
@@ -181,7 +231,8 @@ export async function processAllFonts(
     },
 ): Promise<DownloadedFamily[]> {
     const cacheDir = path.resolve(root, options.cacheDir ?? DEFAULT_CACHE_DIR)
-    const fontsDir = path.join(cacheDir, 'fonts')
+    const fontBaseDir = resolveFontBaseDir(options.base)
+    const fontsDir = path.join(cacheDir, fontBaseDir)
     const metaFile = path.join(cacheDir, 'meta.json')
 
     // Ensure directories exist
@@ -222,20 +273,23 @@ export async function processAllFonts(
             const css = fs.readFileSync(cssFile, 'utf-8')
             const referencedFiles = extractReferencedLocalFiles(css)
             const filesToUse = referencedFiles.length > 0 ? referencedFiles : cached.files
+            if (hasAllCachedFiles(fontsDir, filesToUse)) {
+                results.push({
+                    family: resolved.family,
+                    slug: resolved.slug,
+                    css,
+                    variable: resolved.variable,
+                    fallback: resolved.fallback,
+                    files: filesToUse.map((f) => ({
+                        localPath: path.join(fontsDir, f),
+                        fileName: f,
+                        subset: '',
+                    })),
+                })
+                continue
+            }
 
-            results.push({
-                family: resolved.family,
-                slug: resolved.slug,
-                css,
-                variable: resolved.variable,
-                fallback: resolved.fallback,
-                files: filesToUse.map((f) => ({
-                    localPath: path.join(fontsDir, f),
-                    fileName: f,
-                    subset: '',
-                })),
-            })
-            continue
+            log(`${resolved.family}: cache metadata was present but font files were missing, rebuilding cache`)
         }
 
         // Fetch CSS from Google Fonts
@@ -394,6 +448,7 @@ export async function processAllFonts(
             hash: configHash,
             files: referencedFiles,
         }
+        pruneFamilyCacheFiles(fontsDir, resolved.slug, referencedFiles)
 
         results.push({
             family: resolved.family,
@@ -435,7 +490,7 @@ function filterCSSBySubsets(css: string, subsets: string[]): string {
         }
     }
 
-    return blocks.join('\n')
+    return blocks.length > 0 ? blocks.join('\n') : css
 }
 
 /**

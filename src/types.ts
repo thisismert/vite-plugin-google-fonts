@@ -13,7 +13,7 @@ export interface FontFamilyOptions {
     /**
      * Font weights to include.
      * Use string ('variable') for variable fonts.
-     * @default 'variable' if available, otherwise error
+     * If omitted, the plugin tries variable first and falls back to available static weights.
      * @example [400, 500, 600, 700]
      * @example 'variable'
      */
@@ -60,8 +60,8 @@ interface GoogleFontsPluginOptionsBase {
     cacheDir?: string
 
     /**
-     * Base path prefix for font file URLs in the generated CSS.
-     * @default 'assets/fonts'
+     * Relative directory under `cacheDir` used for downloaded font files and generated CSS URLs.
+     * @default 'fonts'
      */
     base?: string
 }
