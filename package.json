@@ -24,6 +24,11 @@
   "engines": {
     "node": ">=18"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thisismert/vite-plugin-google-fonts"
+  },
+  "homepage": "https://github.com/thisismert/vite-plugin-google-fonts",
   "peerDependencies": {
     "vite": ">=4.0.0"
   },
