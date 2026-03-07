@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-google-fonts",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A simple Vite plugin for optimizing and self-hosting fonts from Google Fonts.",
   "type": "module",
   "main": "./dist/index.cjs",
