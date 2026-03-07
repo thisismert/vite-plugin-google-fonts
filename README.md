@@ -2,7 +2,7 @@
 
 Self-host Google Fonts in Vite by downloading the font files at build/dev startup, rewriting the Google CSS to local asset URLs, injecting the stylesheet automatically, and preloading the emitted `woff2` files.
 
-This is a thing that I vibecoded for using in a project but now I'm using it on all of my projects with Vite. So I decided to publish it.
+This is a thing that I vibecoded for using in a project but now I'm using it on all of my projects that uses Vite. So I decided to publish it.
 
 ## What it does
 
