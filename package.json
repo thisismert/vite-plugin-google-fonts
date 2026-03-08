@@ -23,7 +23,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "generate:catalog": "node scripts/generate-font-catalog.mjs",
-    "prepublishOnly": "npm run generate:catalog && npm run typecheck && npm run test && npm run build"
+    "prepublishOnly": "npm run generate:catalog && npm run typecheck && npm test && npm run build"
   },
   "engines": {
     "node": ">=18"
