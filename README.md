@@ -45,7 +45,7 @@ export default defineConfig({
         Inter: {
           variable: '--font-sans',
         },
-        'JetBrains Mono': {
+        JetBrains_Mono: {
           variable: '--font-mono',
         },
       },
