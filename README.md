@@ -342,7 +342,7 @@ googleFonts({
     Inter: {
       variable: '--font-sans',
     },
-    'Playfair Display': {
+    Playfair_Display: {
       variable: '--font-serif',
       fallback: 'Georgia, serif',
     },
