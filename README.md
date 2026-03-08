@@ -25,6 +25,12 @@ Peer requirement:
 - `vite >= 4`
 - `node >= 18`
 
+TypeScript note:
+
+- Canonical Google font family names are now type-checked strictly
+- `styles`, `subsets`, and manual `weights` are validated per family
+- This is a semver-major type change for TS consumers upgrading from the older loose `Record<string, ...>` API
+
 ## Quick start
 
 ```ts
@@ -38,11 +44,9 @@ export default defineConfig({
       fonts: {
         Inter: {
           variable: '--font-sans',
-          fallback: 'system-ui, sans-serif',
         },
-        'JetBrains Mono': {
+        JetBrains_Mono: {
           variable: '--font-mono',
-          fallback: 'ui-monospace, monospace',
         },
       },
     }),
@@ -83,7 +87,6 @@ googleFonts({
   fonts: {
     Inter: {
       variable: '--font-sans',
-      fallback: 'system-ui, sans-serif',
     },
   },
 })
@@ -104,27 +107,111 @@ Generates:
 import type { GoogleFontsPluginOptions } from 'vite-plugin-google-fonts'
 ```
 
+Additional exports:
+
+```ts
+import {
+  googleFontFamilies,
+  isGoogleFontFamily,
+  type GoogleFontFamily,
+  type GoogleFontSubset,
+  type GoogleFontStyle,
+  type GoogleFontWeight,
+} from 'vite-plugin-google-fonts'
+```
+
 ### Plugin options
 
 ```ts
-type GoogleFontsPluginOptions = {
+type OptimizedGoogleFontsPluginOptions = {
   cacheDir?: string
   base?: string
-  optimizeWeights?: boolean
-  fonts: Record<string, FontFamilyOptions>
+  optimizeWeights?: true
+  fonts: Partial<{
+    [K in GoogleFontFamily]: FontFamilyOptions<K, true>
+  }>
 }
+
+type ManualGoogleFontsPluginOptions = {
+  cacheDir?: string
+  base?: string
+  optimizeWeights: false
+  fonts: Partial<{
+    [K in GoogleFontFamily]: FontFamilyOptions<K, false>
+  }>
+}
+
+type DynamicGoogleFontsPluginOptions =
+  import('vite-plugin-google-fonts').DynamicGoogleFontsPluginOptions
+
+type GoogleFontsPluginOptions =
+  | OptimizedGoogleFontsPluginOptions
+  | ManualGoogleFontsPluginOptions
+  | DynamicGoogleFontsPluginOptions
 ```
 
 ### Per-font options
 
 ```ts
-type FontFamilyOptions = {
-  variable?: string
-  weights?: number[] | 'variable'
-  styles?: Array<'normal' | 'italic'>
-  subsets?: string[]
+type FontFamilyOptions<TFamily extends GoogleFontFamily, TOptimize extends boolean> = {
+  variable?: `--${string}`
+  styles?: Array<GoogleFontStyle<TFamily>>
+  subsets?: Array<GoogleFontSubset<TFamily>>
   display?: 'auto' | 'block' | 'swap' | 'fallback' | 'optional'
   fallback?: string
+} & (
+  TOptimize extends false
+    ? {
+        weights?: Array<GoogleFontWeight<TFamily>> | 'variable'
+      }
+    : {
+        weights?: never
+      }
+)
+```
+
+## Type safety
+
+- Font keys must be canonical Google Fonts family identifiers such as `Inter` or `JetBrains_Mono`
+- `styles`, `subsets`, and `weights` are derived from metadata for that specific family
+- `weights: 'variable'` is only accepted for families that support variable downloads
+- When `optimizeWeights` is omitted or `true`, `weights` is removed from the type surface and rejected at runtime too
+
+Example:
+
+```ts
+googleFonts({
+  optimizeWeights: false,
+  fonts: {
+    Inter: {
+      weights: 'variable',
+      styles: ['normal', 'italic'],
+      subsets: ['latin', 'latin-ext'],
+    },
+    Recursive: {
+      weights: [300, 400, 500],
+      styles: ['normal'],
+    },
+  },
+})
+```
+
+### Dynamic configs
+
+If you build font configs dynamically, use the helper exports to narrow user input before constructing the config object:
+
+```ts
+import { googleFontFamilies, isGoogleFontFamily } from 'vite-plugin-google-fonts'
+
+for (const family of googleFontFamilies) {
+  console.log(family)
+}
+
+const family = process.env.FONT_FAMILY ?? 'Inter'
+
+if (isGoogleFontFamily(family)) {
+  // `family` is now narrowed to `GoogleFontFamily`
+  console.log(`Using supported family: ${family}`)
 }
 ```
 
@@ -179,12 +266,12 @@ googleFonts({
 Controls which font weights are requested for a single family when `optimizeWeights: false`.
 
 - `weights: 'variable'` requests the variable version when Google Fonts supports it
-- `weights: [400, 700]` requests only those static weights
+- `weights: [400, 700]` requests only static weights supported by that family
 - If `weights` is omitted, the plugin first tries a variable font and falls back to available static weights automatically
 
 ### `styles`
 
-Controls `normal` and/or `italic` variants.
+Controls the style variants supported by the selected family.
 
 ```ts
 googleFonts({
@@ -204,6 +291,7 @@ Filters the downloaded `@font-face` blocks to the requested subsets.
 
 - Default: `['latin']`
 - Example: `['latin', 'latin-ext']`
+- Only subsets available for the selected family are accepted by the type surface and runtime validator
 
 If Google Fonts does not return the requested subset labels for a family, the plugin keeps the original CSS instead of emitting an empty stylesheet.
 
@@ -217,7 +305,11 @@ Sets the `font-display` strategy used in the Google Fonts CSS request.
 
 Fallback font stack appended after the configured family.
 
-- Default: `'sans-serif'`
+- Default depends on detected font category:
+  - sans-serif -> `'system-ui, sans-serif'`
+  - serif -> `'ui-serif, serif'`
+  - monospace -> `'ui-monospace, monospace'`
+  - other categories fall back to `'sans-serif'`
 
 Example:
 
@@ -249,9 +341,8 @@ googleFonts({
   fonts: {
     Inter: {
       variable: '--font-sans',
-      fallback: 'system-ui, sans-serif',
     },
-    'Playfair Display': {
+    Playfair_Display: {
       variable: '--font-serif',
       fallback: 'Georgia, serif',
     },
@@ -283,6 +374,8 @@ googleFonts({
 ## Development
 
 ```bash
+npm run generate:catalog
 npm run typecheck
+npm test
 npm run build
 ```

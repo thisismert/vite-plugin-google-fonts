@@ -1,7 +1,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import type { FontFamilyOptions, GoogleFontsPluginOptions } from './types.js'
+import { googleFontCatalog } from './generated/font-catalog.js'
+import {
+    googleFontFamilies,
+    isGoogleFontFamily,
+    toFamilyName,
+    type GoogleFontFamily,
+    type GoogleFontsPluginOptions,
+} from './types.js'
 import {
     buildGoogleFontsUrl,
     fetchAvailableStaticWeightsCSS,
@@ -14,7 +21,9 @@ export const DEFAULT_CACHE_DIR = 'node_modules/.google-fonts'
 export const DEFAULT_FONT_BASE_DIR = 'fonts'
 
 interface ResolvedFamily {
-    family: string
+    family: GoogleFontFamily
+    /** The canonical Google Fonts family name (e.g. 'JetBrains Mono'). */
+    familyName: string
     slug: string
     weights: string[]
     hasExplicitWeights: boolean
@@ -25,7 +34,27 @@ interface ResolvedFamily {
     fallback: string
 }
 
+interface RuntimeFontFamilyOptions {
+    variable?: string
+    weights?: number[] | 'variable'
+    styles?: string[]
+    subsets?: string[]
+    display?: string
+    fallback?: string
+}
+
+const CATEGORY_FALLBACKS: Record<string, string> = {
+    'sans-serif': 'system-ui, sans-serif',
+    serif: 'ui-serif, serif',
+    monospace: 'ui-monospace, monospace',
+}
+
+export function getDefaultFallbackForFamily(family: GoogleFontFamily): string {
+    return CATEGORY_FALLBACKS[googleFontCatalog[family].category] ?? 'sans-serif'
+}
+
 export interface DownloadedFamily {
+    /** The canonical Google Fonts family name (e.g. 'JetBrains Mono'). */
     family: string
     slug: string
     /** The rewritten CSS with local file paths */
@@ -51,10 +80,6 @@ export function toSlug(family: string): string {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '')
-}
-
-function normalizeFamilyName(family: string): string {
-    return family.trim().replace(/[ _]+/g, ' ')
 }
 
 export function resolveFontBaseDir(base?: string): string {
@@ -182,11 +207,173 @@ function pruneFamilyCacheFiles(
     }
 }
 
-function resolveFamily(
+function normalizeFamilyNameForLookup(family: string): string {
+    return family.trim().replace(/[ _]+/g, ' ').toLowerCase()
+}
+
+function levenshteinDistance(a: string, b: string): number {
+    if (a === b) {
+        return 0
+    }
+
+    const previous = Array.from({ length: b.length + 1 }, (_, index) => index)
+
+    for (let i = 1; i <= a.length; i++) {
+        let diagonal = previous[0]
+        previous[0] = i
+
+        for (let j = 1; j <= b.length; j++) {
+            const temp = previous[j]
+            previous[j] = Math.min(
+                previous[j] + 1,
+                previous[j - 1] + 1,
+                diagonal + (a[i - 1] === b[j - 1] ? 0 : 1),
+            )
+            diagonal = temp
+        }
+    }
+
+    return previous[b.length]
+}
+
+function findSuggestedFamilyName(family: string): GoogleFontFamily | undefined {
+    const normalized = normalizeFamilyNameForLookup(family)
+
+    for (const candidate of googleFontFamilies) {
+        if (normalizeFamilyNameForLookup(candidate) === normalized) {
+            return candidate
+        }
+    }
+
+    let bestCandidate: GoogleFontFamily | undefined
+    let bestDistance = Number.POSITIVE_INFINITY
+
+    for (const candidate of googleFontFamilies) {
+        const distance = levenshteinDistance(
+            normalized,
+            normalizeFamilyNameForLookup(candidate),
+        )
+
+        if (distance < bestDistance) {
+            bestDistance = distance
+            bestCandidate = candidate
+        }
+    }
+
+    const threshold = Math.max(2, Math.floor(normalized.length * 0.3))
+    return bestDistance <= threshold ? bestCandidate : undefined
+}
+
+function formatAllowedValues(values: readonly string[] | readonly number[]): string {
+    return values.map(String).join(', ')
+}
+
+function assertArrayOption(
     family: string,
-    config?: FontFamilyOptions,
+    optionName: string,
+    value: unknown,
+): asserts value is unknown[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`Font family "${family}" expects "${optionName}" to be an array.`)
+    }
+}
+
+export function validateGoogleFontsOptions(options: GoogleFontsPluginOptions): void {
+    for (const [familyName, familyOptions] of Object.entries(options.fonts)) {
+        if (!isGoogleFontFamily(familyName)) {
+            const suggestion = findSuggestedFamilyName(familyName)
+            const suggestionMessage = suggestion
+                ? ` Did you mean "${suggestion}"?`
+                : ''
+
+            throw new Error(
+                `Unknown Google font family "${familyName}".${suggestionMessage}`,
+            )
+        }
+
+        const family = familyName as GoogleFontFamily
+        const metadata: {
+            weights: readonly number[]
+            styles: readonly string[]
+            subsets: readonly string[]
+            category: string
+            variable: boolean
+        } = googleFontCatalog[family]
+        const config: RuntimeFontFamilyOptions = familyOptions ?? {}
+
+        if (
+            config.variable !== undefined &&
+            !config.variable.startsWith('--')
+        ) {
+            throw new Error(
+                `Font family "${family}" expects "variable" to start with "--".`,
+            )
+        }
+
+        if (config.styles !== undefined) {
+            assertArrayOption(family, 'styles', config.styles)
+
+            for (const style of config.styles) {
+                if (!metadata.styles.includes(String(style))) {
+                    throw new Error(
+                        `Font family "${family}" does not support style "${String(style)}". Supported styles: ${formatAllowedValues(metadata.styles)}.`,
+                    )
+                }
+            }
+        }
+
+        if (config.subsets !== undefined) {
+            assertArrayOption(family, 'subsets', config.subsets)
+
+            for (const subset of config.subsets) {
+                if (!metadata.subsets.includes(String(subset))) {
+                    throw new Error(
+                        `Font family "${family}" does not support subset "${String(subset)}". Supported subsets: ${formatAllowedValues(metadata.subsets)}.`,
+                    )
+                }
+            }
+        }
+
+        if (config.weights === undefined) {
+            continue
+        }
+
+        if (options.optimizeWeights !== false) {
+            throw new Error(
+                `Font family "${family}" cannot specify "weights" unless "optimizeWeights" is set to false.`,
+            )
+        }
+
+        if (config.weights === 'variable') {
+            if (!metadata.variable) {
+                throw new Error(
+                    `Font family "${family}" does not support variable weights.`,
+                )
+            }
+
+            continue
+        }
+
+        assertArrayOption(family, 'weights', config.weights)
+
+        for (const weight of config.weights) {
+            if (
+                typeof weight !== 'number' ||
+                !metadata.weights.includes(weight)
+            ) {
+                throw new Error(
+                    `Font family "${family}" does not support weight "${String(weight)}". Supported weights: ${formatAllowedValues(metadata.weights)}.`,
+                )
+            }
+        }
+    }
+}
+
+function resolveFamily(
+    family: GoogleFontFamily,
+    config?: RuntimeFontFamilyOptions,
 ): ResolvedFamily {
-    const defaults: FontFamilyOptions = {
+    const defaults: Required<Pick<RuntimeFontFamilyOptions, 'styles' | 'subsets' | 'display'>> = {
         styles: ['normal'],
         subsets: ['latin'],
         display: 'swap',
@@ -202,16 +389,19 @@ function resolveFamily(
                 ? ['variable']
                 : (opts.weights ?? [400]).map(String)
 
+    const familyName = toFamilyName(family)
+
     return {
-        family: normalizeFamilyName(family),
-        slug: toSlug(family),
+        family,
+        familyName,
+        slug: toSlug(familyName),
         weights,
         hasExplicitWeights,
         styles: opts.styles ?? ['normal'],
         subsets: opts.subsets ?? ['latin'],
         display: opts.display ?? 'swap',
         variable: opts.variable,
-        fallback: opts.fallback ?? 'sans-serif',
+        fallback: opts.fallback ?? getDefaultFallbackForFamily(family),
     }
 }
 
@@ -252,14 +442,17 @@ export async function processAllFonts(
     const results: DownloadedFamily[] = []
 
     for (const [familyName, familyOptions] of families) {
-        const resolved = resolveFamily(familyName, familyOptions)
+        const resolved = resolveFamily(
+            familyName as GoogleFontFamily,
+            familyOptions as RuntimeFontFamilyOptions | undefined,
+        )
         const optimizedStaticWeights = context?.usedStaticWeights
 
         // Build a hash of the config to detect changes
         const configHash = crypto
             .createHash('md5')
             .update(JSON.stringify({
-                version: 4,
+                version: 5,
                 resolved,
                 optimizedStaticWeights,
             }))
@@ -275,7 +468,7 @@ export async function processAllFonts(
             const filesToUse = referencedFiles.length > 0 ? referencedFiles : cached.files
             if (hasAllCachedFiles(fontsDir, filesToUse)) {
                 results.push({
-                    family: resolved.family,
+                    family: resolved.familyName,
                     slug: resolved.slug,
                     css,
                     variable: resolved.variable,
@@ -289,7 +482,7 @@ export async function processAllFonts(
                 continue
             }
 
-            log(`${resolved.family}: cache metadata was present but font files were missing, rebuilding cache`)
+            log(`${resolved.familyName}: cache metadata was present but font files were missing, rebuilding cache`)
         }
 
         // Fetch CSS from Google Fonts
@@ -306,16 +499,16 @@ export async function processAllFonts(
                 // If the font is not available as variable, all back to downloading all available static weights.
                 try {
                     cssContent = await fetchVariableCSSWithRangeFallback(
-                        resolved.family,
+                        resolved.familyName,
                         {
                             styles: resolved.styles,
                             display: resolved.display,
                         },
                     )
                 } catch {
-                    log(`${resolved.family} is not available as variable font, falling back to static weights`)
+                    log(`${resolved.familyName} is not available as variable font, falling back to static weights`)
                     const staticResult = await fetchAvailableStaticWeightsCSS(
-                        resolved.family,
+                        resolved.familyName,
                         {
                             styles: resolved.styles,
                             display: resolved.display,
@@ -336,11 +529,11 @@ export async function processAllFonts(
 
                     const added = weightsToUse.filter((w) => !resolved.weights.includes(w))
                     if (added.length > 0) {
-                        log(`${resolved.family}: added detected weights [${added.join(', ')}] to explicit [${resolved.weights.join(', ')}]`)
+                        log(`${resolved.familyName}: added detected weights [${added.join(', ')}] to explicit [${resolved.weights.join(', ')}]`)
                     }
                 }
 
-                const url = buildGoogleFontsUrl(resolved.family, {
+                const url = buildGoogleFontsUrl(resolved.familyName, {
                     ...baseBuildUrlOpts,
                     weights: weightsToUse,
                 })
@@ -353,7 +546,7 @@ export async function processAllFonts(
 
                 try {
                     cssContent = await fetchVariableCSSWithRangeFallback(
-                        resolved.family,
+                        resolved.familyName,
                         variableOpts,
                     )
                 } catch {
@@ -365,7 +558,7 @@ export async function processAllFonts(
                     if (optimizedStaticWeights && optimizedStaticWeights.length > 0) {
                         try {
                             staticResult = await fetchAvailableStaticWeightsCSS(
-                                resolved.family,
+                                resolved.familyName,
                                 {
                                     ...staticBaseOpts,
                                     candidates: optimizedStaticWeights,
@@ -373,13 +566,13 @@ export async function processAllFonts(
                             )
                         } catch {
                             staticResult = await fetchAvailableStaticWeightsCSS(
-                                resolved.family,
+                                resolved.familyName,
                                 staticBaseOpts,
                             )
                         }
                     } else {
                         staticResult = await fetchAvailableStaticWeightsCSS(
-                            resolved.family,
+                            resolved.familyName,
                             staticBaseOpts,
                         )
                     }
@@ -451,7 +644,7 @@ export async function processAllFonts(
         pruneFamilyCacheFiles(fontsDir, resolved.slug, referencedFiles)
 
         results.push({
-            family: resolved.family,
+            family: resolved.familyName,
             slug: resolved.slug,
             css: rewrittenCSS,
             variable: resolved.variable,
