@@ -1,13 +1,20 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { normalizePath, type Plugin, type ResolvedConfig } from 'vite'
-import type { FontMap, GoogleFontsPluginOptions } from './types.js'
+import {
+    isGoogleFontFamily,
+    toFamilyName,
+    type FontMap,
+    type GoogleFontFamily,
+    type GoogleFontsPluginOptions,
+} from './types.js'
 import {
     processAllFonts,
     generateFontCSS,
     toSlug,
     DEFAULT_CACHE_DIR,
     resolveFontBaseDir,
+    validateGoogleFontsOptions,
     type DownloadedFamily,
 } from './core.js'
 import { detectUsedStaticWeights } from './weights.js'
@@ -17,7 +24,7 @@ function isVariableRangeCSS(css: string): boolean {
 }
 
 function hasPotentialStaticFallback(
-    fonts: FontMap,
+    fonts: GoogleFontsPluginOptions['fonts'],
     root: string,
     cacheDirOption?: string,
 ): boolean {
@@ -25,16 +32,19 @@ function hasPotentialStaticFallback(
 
     const cacheDir = path.resolve(root, cacheDirOption ?? DEFAULT_CACHE_DIR)
 
-    return Object.entries(fonts).some(([familyName, familyOptions]) => {
-        if (familyOptions.weights === 'variable') {
+    return Object.entries(fonts).some(([familyKey, familyOptions]) => {
+        const weights = (familyOptions as { weights?: unknown })?.weights
+        if (!familyOptions || weights === 'variable') {
             return false
         }
 
-        if (Array.isArray(familyOptions.weights)) {
+        if (Array.isArray(weights)) {
             return true
         }
 
-        const slug = toSlug(familyName)
+        const slug = isGoogleFontFamily(familyKey)
+            ? toSlug(toFamilyName(familyKey))
+            : toSlug(familyKey)
         const cssFile = path.join(cacheDir, `${slug}.css`)
         if (!fs.existsSync(cssFile)) {
             return true
@@ -50,9 +60,19 @@ function hasPotentialStaticFallback(
 }
 
 // We use `any` for the return type to avoid Vite version type mismatches when consumers use a different Vite version than the plugin was built with.
-export default function googleFontsPlugin<const TFonts extends FontMap>(
-    options: GoogleFontsPluginOptions<TFonts>,
+export default function googleFontsPlugin<TOptimize extends boolean = true>(
+    options: {
+        cacheDir?: string
+        base?: string
+        optimizeWeights?: TOptimize
+        fonts: FontMap<[TOptimize] extends [false] ? false : true>
+    },
+): any[]
+export default function googleFontsPlugin(
+    options: GoogleFontsPluginOptions,
 ): any[] {
+    validateGoogleFontsOptions(options)
+
     let config: ResolvedConfig
     let root: string
     let cssFilePath = ''
