@@ -172,7 +172,7 @@ type FontFamilyOptions<TFamily extends GoogleFontFamily, TOptimize extends boole
 
 ## Type safety
 
-- Font keys must be canonical Google Fonts family names such as `Inter` or `'JetBrains Mono'`
+- Font keys must be canonical Google Fonts family identifiers such as `Inter` or `JetBrains_Mono`
 - `styles`, `subsets`, and `weights` are derived from metadata for that specific family
 - `weights: 'variable'` is only accepted for families that support variable downloads
 - When `optimizeWeights` is omitted or `true`, `weights` is removed from the type surface and rejected at runtime too
