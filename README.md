@@ -141,9 +141,13 @@ type ManualGoogleFontsPluginOptions = {
   }>
 }
 
+type DynamicGoogleFontsPluginOptions =
+  import('vite-plugin-google-fonts').DynamicGoogleFontsPluginOptions
+
 type GoogleFontsPluginOptions =
   | OptimizedGoogleFontsPluginOptions
   | ManualGoogleFontsPluginOptions
+  | DynamicGoogleFontsPluginOptions
 ```
 
 ### Per-font options
