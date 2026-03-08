@@ -20,6 +20,31 @@ import {
 export const DEFAULT_CACHE_DIR = 'node_modules/.google-fonts'
 export const DEFAULT_FONT_BASE_DIR = 'fonts'
 
+function toErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
+}
+
+function createLoggedError(
+    log: (msg: string) => void,
+    message: string,
+    cause: unknown,
+): Error {
+    log(message)
+    return cause instanceof Error
+        ? new Error(message, { cause })
+        : new Error(message)
+}
+
+function cleanupDownloadedFiles(filePaths: string[]): void {
+    for (const filePath of filePaths) {
+        try {
+            fs.unlinkSync(filePath)
+        } catch {
+            // Best-effort cleanup only.
+        }
+    }
+}
+
 interface ResolvedFamily {
     family: GoogleFontFamily
     /** The canonical Google Fonts family name (e.g. 'JetBrains Mono'). */
@@ -581,8 +606,11 @@ export async function processAllFonts(
                 }
             }
         } catch (err) {
-            log(`Failed to fetch ${familyName}: ${(err as Error).message}`)
-            continue
+            throw createLoggedError(
+                log,
+                `Failed to fetch CSS for ${resolved.familyName}: ${toErrorMessage(err)}`,
+                err,
+            )
         }
 
         const filteredCSS = filterCSSBySubsets(cssContent, resolved.subsets)
@@ -615,7 +643,12 @@ export async function processAllFonts(
                     subset: fileInfo.subset,
                 })
             } catch (err) {
-                log(`Failed to download font file: ${(err as Error).message}`)
+                cleanupDownloadedFiles(downloadedFiles.map((file) => file.localPath))
+                throw createLoggedError(
+                    log,
+                    `Failed to download font file for ${resolved.familyName} (${fileInfo.subset || 'unknown subset'}): ${fileInfo.url} - ${toErrorMessage(err)}`,
+                    err,
+                )
             }
         }
 

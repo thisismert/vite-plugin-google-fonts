@@ -4,6 +4,7 @@ import googleFonts, {
 } from '../src/index.js'
 
 const optimizedConfig = {
+    entry: 'src/main.tsx',
     fonts: {
         Inter: {
             styles: ['normal', 'italic'],
@@ -56,6 +57,18 @@ const dynamicOptimizeConfig = {
 } satisfies DynamicGoogleFontsPluginOptions
 
 googleFonts(dynamicOptimizeConfig)
+
+const multiEntryConfig = {
+    entry: ['src/main.tsx', 'src/admin.tsx'],
+    fonts: {
+        Inter: {
+            styles: ['normal'],
+            subsets: ['latin'],
+        },
+    },
+} satisfies GoogleFontsPluginOptions
+
+googleFonts(multiEntryConfig)
 
 const invalidFamily = {
     fonts: {
@@ -157,3 +170,13 @@ const invalidWeightsWhenBoolean = {
 } satisfies DynamicGoogleFontsPluginOptions
 
 void invalidWeightsWhenBoolean
+
+const invalidEntry = {
+    // @ts-expect-error `entry` must be a string or string array.
+    entry: 123,
+    fonts: {
+        Inter: {},
+    },
+} satisfies GoogleFontsPluginOptions
+
+void invalidEntry

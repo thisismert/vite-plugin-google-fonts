@@ -105,6 +105,13 @@ interface GoogleFontsPluginOptionsBase<TOptimize extends boolean> {
     cacheDir?: string
 
     /**
+     * Application entry file(s) that should receive the generated CSS import.
+     * Values may be relative to the Vite project root or absolute paths.
+     * If omitted, the plugin falls back to framework-specific and common Vite entry file names.
+     */
+    entry?: string | string[]
+
+    /**
      * Relative directory under `cacheDir` used for downloaded font files and generated CSS URLs.
      * @default 'fonts'
      */

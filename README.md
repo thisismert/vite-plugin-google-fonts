@@ -12,6 +12,7 @@ This is a thing that I vibecoded for using in a project but now I'm using it on 
 - Adds `<link rel="preload" as="font">` tags for the emitted font files.
 - Prefers variable fonts when available.
 - Falls back to static weights automatically when a variable font is unavailable.
+- Fails the build immediately if a configured font CSS or font file cannot be downloaded.
 - Optionally scans your source files during build to keep static-weight downloads limited to the weights you actually use.
 
 ## Install
@@ -125,6 +126,7 @@ import {
 ```ts
 type OptimizedGoogleFontsPluginOptions = {
   cacheDir?: string
+  entry?: string | string[]
   base?: string
   optimizeWeights?: true
   fonts: Partial<{
@@ -134,6 +136,7 @@ type OptimizedGoogleFontsPluginOptions = {
 
 type ManualGoogleFontsPluginOptions = {
   cacheDir?: string
+  entry?: string | string[]
   base?: string
   optimizeWeights: false
   fonts: Partial<{
@@ -221,6 +224,28 @@ Directory used for the generated CSS, metadata, and downloaded font files.
 
 - Default: `node_modules/.google-fonts`
 - Value is resolved relative to the Vite project root
+
+### `entry`
+
+Application entry file or files that should receive the generated CSS import.
+
+- Optional
+- Accepts a single path or an array of paths
+- Relative paths are resolved from the Vite project root
+- Absolute paths are also allowed
+- If omitted, the plugin falls back to framework-specific and common Vite entry file names
+- If provided and a file cannot be found, the plugin throws immediately
+
+Example:
+
+```ts
+googleFonts({
+  entry: ['src/main.tsx', 'src/admin.tsx'],
+  fonts: {
+    Inter: {},
+  },
+})
+```
 
 ### `optimizeWeights`
 
@@ -329,6 +354,8 @@ googleFonts({
 - The generated stylesheet is written into the cache directory as `google-fonts.css`.
 - Font files are cached using content-hashed filenames.
 - The cache is reused across runs and stale files for a family are cleaned up automatically.
+- Automatic entry detection does not inspect `index.html`.
+- If `entry` is omitted, the plugin falls back to common framework entry files for React, Vue, TanStack Start, SvelteKit, Solid, Preact, Remix, Qwik, and standard Vite layouts.
 - During build, preload tags point at the final emitted font assets.
 - During dev, preload tags point at the cached files inside your project.
 
