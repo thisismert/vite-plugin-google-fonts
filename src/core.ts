@@ -420,8 +420,6 @@ export async function processAllFonts(
         usedStaticWeights?: string[]
     },
 ): Promise<DownloadedFamily[]> {
-    validateGoogleFontsOptions(options)
-
     const cacheDir = path.resolve(root, options.cacheDir ?? DEFAULT_CACHE_DIR)
     const fontBaseDir = resolveFontBaseDir(options.base)
     const fontsDir = path.join(cacheDir, fontBaseDir)
