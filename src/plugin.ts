@@ -16,7 +16,7 @@ import {
 } from './core.js'
 import { detectUsedStaticWeights, hasStylesheetImport } from './weights.js'
 
-const DEFAULT_CSS_FILE = 'src/generated/google-fonts.css'
+const DEFAULT_CSS_FILE = 'src/generated/fonts.css'
 const resolveFromPlugin = createRequire(import.meta.url)
 
 function isTailwindInstalled(root: string): boolean {
