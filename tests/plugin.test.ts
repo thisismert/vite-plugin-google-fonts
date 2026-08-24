@@ -1,0 +1,170 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ResolvedConfig } from 'vite'
+import type { GoogleFontsPluginOptions } from '../src/types.js'
+
+vi.mock('../src/fetch.js', async () => {
+    const actual = await vi.importActual<typeof import('../src/fetch.js')>(
+        '../src/fetch.js',
+    )
+
+    return {
+        ...actual,
+        fetchGoogleFontCSS: vi.fn(),
+        downloadFontFile: vi.fn(),
+    }
+})
+
+import * as fetchApi from '../src/fetch.js'
+import googleFontsPlugin from '../src/plugin.js'
+
+let root: string
+
+beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'google-fonts-plugin-'))
+    vi.clearAllMocks()
+    vi.mocked(fetchApi.fetchGoogleFontCSS).mockResolvedValue(
+        '/* latin */\n@font-face { src: url(https://example.com/inter.woff2); }',
+    )
+    vi.mocked(fetchApi.downloadFontFile).mockResolvedValue(
+        Buffer.from('font bytes'),
+    )
+})
+
+afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true })
+})
+
+function createConfig(
+    command: 'serve' | 'build',
+    logger: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> },
+): ResolvedConfig {
+    return {
+        root,
+        command,
+        logger,
+    } as unknown as ResolvedConfig
+}
+
+function getHookFunction(
+    hook: unknown,
+): ((...args: never[]) => unknown) | undefined {
+    if (typeof hook === 'function') {
+        return hook as (...args: never[]) => unknown
+    }
+
+    if (
+        hook &&
+        typeof hook === 'object' &&
+        'handler' in hook &&
+        typeof hook.handler === 'function'
+    ) {
+        return hook.handler as (...args: never[]) => unknown
+    }
+
+    return undefined
+}
+
+function resolveConfig(plugin: ReturnType<typeof googleFontsPlugin>[number], config: ResolvedConfig): void {
+    const hook = getHookFunction(plugin.configResolved) as
+        | ((config: ResolvedConfig) => void)
+        | undefined
+
+    if (!hook) {
+        throw new Error('Plugin does not define configResolved')
+    }
+
+    hook(config)
+}
+
+async function runBuildStart(
+    plugin: ReturnType<typeof googleFontsPlugin>[number],
+): Promise<void> {
+    const hook = getHookFunction(plugin.buildStart) as
+        | (() => void | Promise<void>)
+        | undefined
+
+    if (!hook) {
+        throw new Error('Plugin does not define buildStart')
+    }
+
+    await hook()
+}
+
+describe('googleFontsPlugin', () => {
+    it('generates the configured stylesheet and uses its relative font base', async () => {
+        const logger = { info: vi.fn(), warn: vi.fn() }
+        const options: GoogleFontsPluginOptions = {
+            cssFile: 'styles/fonts.css',
+            cacheDir: '.cache',
+            base: 'assets/fonts',
+            fonts: { Inter: { variable: '--font-sans' } },
+        }
+        fs.mkdirSync(path.join(root, 'src'), { recursive: true })
+        fs.writeFileSync(
+            path.join(root, 'src', 'index.css'),
+            '@import "../styles/fonts.css";',
+        )
+        const plugin = googleFontsPlugin(options)[0]
+        resolveConfig(plugin, createConfig('serve', logger))
+
+        await runBuildStart(plugin)
+
+        const generatedPath = path.join(root, 'styles', 'fonts.css')
+        const generatedCSS = fs.readFileSync(generatedPath, 'utf8')
+
+        expect(plugin.name).toBe('google-fonts')
+        expect(plugin.enforce).toBe('pre')
+        expect(generatedCSS).toContain('../.cache/assets/fonts/inter-')
+        expect(generatedCSS).toContain("--font-sans: 'Inter', system-ui, sans-serif;")
+        expect(generatedCSS).not.toContain('@theme inline')
+        expect(logger.info).toHaveBeenCalledWith(
+            '[google-fonts] Generated styles/fonts.css',
+            { timestamp: true },
+        )
+        expect(logger.warn).not.toHaveBeenCalled()
+    })
+
+    it('emits the Tailwind theme when Tailwind is installed', async () => {
+        const logger = { info: vi.fn(), warn: vi.fn() }
+        const tailwindPath = path.join(root, 'node_modules', 'tailwindcss')
+        fs.mkdirSync(tailwindPath, { recursive: true })
+        fs.writeFileSync(
+            path.join(tailwindPath, 'package.json'),
+            JSON.stringify({ name: 'tailwindcss', main: 'index.js' }),
+        )
+        fs.writeFileSync(path.join(tailwindPath, 'index.js'), '')
+
+        const plugin = googleFontsPlugin({
+            fonts: { Inter: { variable: '--font-sans' } },
+        })[0]
+        resolveConfig(plugin, createConfig('build', logger))
+
+        await runBuildStart(plugin)
+
+        const generatedCSS = fs.readFileSync(
+            path.join(root, 'src/generated/google-fonts.css'),
+            'utf8',
+        )
+        expect(generatedCSS).toContain('@theme inline')
+    })
+
+    it('warns once when the generated stylesheet is not imported during dev', async () => {
+        const logger = { info: vi.fn(), warn: vi.fn() }
+        const plugin = googleFontsPlugin({
+            fonts: { Inter: {} },
+        })[0]
+        resolveConfig(plugin, createConfig('serve', logger))
+
+        await runBuildStart(plugin)
+        await runBuildStart(plugin)
+
+        expect(logger.warn).toHaveBeenCalledTimes(1)
+        expect(logger.warn).toHaveBeenCalledWith(
+            expect.stringContaining('Generated stylesheet is not imported'),
+            { timestamp: true },
+        )
+    })
+})

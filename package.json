@@ -1,0 +1,48 @@
+{
+  "name": "vite-plugin-google-fonts",
+  "version": "0.1.0",
+  "description": "Self-host Google Fonts in Vite with local CSS, cached font assets, CSS variables, and Tailwind theme mappings.",
+  "type": "module",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "lint": "oxlint",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "generate:catalog": "node scripts/generate-font-catalog.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thisismert/vite-plugin-google-fonts.git"
+  },
+  "homepage": "https://github.com/thisismert/vite-plugin-google-fonts",
+  "author": {
+    "name": "Mert",
+    "url": "https://github.com/thisismert"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "vite": ">=4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "oxlint": "^1.79.0",
+    "tsdown": "^0.22.14",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  }
+}
