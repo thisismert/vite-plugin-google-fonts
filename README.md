@@ -2,6 +2,10 @@
 
 A Vite plugin that downloads Google Fonts at startup, stores the font files in a local cache, and generates a workspace stylesheet with local `@font-face` rules, CSS variables, and Tailwind theme mappings.
 
+This was something I vibecoded to use in a project, but then I decided to release it as a seperate project.
+
+I am still working on docs, for now you can check below for basic usage and options. If you have any questions, feel free to open an issue.
+
 ## Installation
 
 ```bash
@@ -10,7 +14,7 @@ pn i vite-plugin-google-fonts
 
 ## Usage
 
-The plugin generates `src/generated/google-fonts.css` by default. Import that file from the application's CSS entry after configuring the plugin.
+The plugin generates `src/generated/fonts.css` by default. Import that file from the application's CSS entry after configuring the plugin.
 
 ```ts
 // vite.config.ts
@@ -36,7 +40,7 @@ export default defineConfig({
 ```css
 /* src/index.css */
 @import "tailwindcss";
-@import "./generated/google-fonts.css";
+@import "./generated/fonts.css";
 ```
 
 ```ts
@@ -59,12 +63,12 @@ import './index.css'
 
 Workspace-relative or absolute path for the generated stylesheet.
 
-Default: `src/generated/google-fonts.css`
+Default: `src/generated/fonts.css`
 
 ```ts
 googleFonts({
-  cssFile: 'src/styles/fonts.css',
-  fonts: { Inter: {} },
+  cssFile: 'src/styles/google-fonts.css',
+  fonts: { Geist: {} },
 })
 ```
 
@@ -109,13 +113,15 @@ Set `optimizeWeights: false` to choose static weights manually (not recommended)
 googleFonts({
   optimizeWeights: false,
   fonts: {
-    Roboto: {
+    Poppins: {
       weights: [400, 500, 700],
       styles: ['normal', 'italic'],
       subsets: ['latin', 'latin-ext'],
+      variable: '--font-sans',
     },
-    Inter: {
+    Playfair_Display: {
       weights: 'variable',
+      variable: '--font-display',
     },
   },
 })
