@@ -1,6 +1,6 @@
 # vite-plugin-google-fonts
 
-A Vite plugin that downloads Google Fonts at startup, stores the font files in a local cache, and generates a workspace stylesheet with local `@font-face` rules, CSS variables, and Tailwind theme mappings.
+A Vite plugin that downloads Google Fonts at startup, stores the font files in a package-local cache, and generates a package stylesheet with local `@font-face` rules, CSS variables, and Tailwind theme mappings.
 
 This was something I vibecoded to use in a project, but then I decided to release it as a seperate project.
 
@@ -14,7 +14,7 @@ pn i vite-plugin-google-fonts
 
 ## Usage
 
-The plugin generates `src/generated/fonts.css` by default. Import that file from the application's CSS entry after configuring the plugin.
+The plugin generates `node_modules/vite-plugin-google-fonts/fonts.css`. Import the package stylesheet from the application's CSS entry after configuring the plugin.
 
 ```ts
 // vite.config.ts
@@ -40,7 +40,7 @@ export default defineConfig({
 ```css
 /* src/index.css */
 @import "tailwindcss";
-@import "./generated/fonts.css";
+@import "vite-plugin-google-fonts/fonts.css";
 ```
 
 ```ts
@@ -52,48 +52,53 @@ import './index.css'
 
 - Downloads and self hosts fonts so you don't have to rely on Google Fonts CDN.
 - Supports variable and static families, including custom weights, styles, and subsets.
-- Generates a stylesheet that you can easily use in your application.
+- Generates the stylesheet inside the installed package, so no generated files are added to your project source tree.
 - Auto-generates Tailwind theme mappings for variable families so you can use them with Tailwind.
 - Typesafe configuration with autocomplete and validation in IDEs. 
 - Optimizes static families by scanning source files for used weights and only including those in the generated stylesheet to reduce build times and bundle sizes.
 
-## Options
+## Generated files
 
-### `cssFile`
+The generated stylesheet and cache live in the installed plugin package:
 
-Workspace-relative or absolute path for the generated stylesheet.
-
-Default: `src/generated/fonts.css`
-
-```ts
-googleFonts({
-  cssFile: 'src/styles/google-fonts.css',
-  fonts: { Geist: {} },
-})
+```text
+node_modules/vite-plugin-google-fonts/
+├── fonts.css
+└── .cache/
+    ├── meta.json
+    ├── <family>.css
+    └── fonts/
 ```
 
-Import the configured file in the application's CSS entry yourself. With Tailwind, place it after `@import "tailwindcss"` so Tailwind expands the generated `@theme inline` block.
+By default, the `.cache` directory contains downloaded font files, one stylesheet per family, and a manifest used for cache validation. It is safe to delete; the plugin recreates it on the next Vite start. Since these files are inside `node_modules`, they do not add generated files to the application source tree.
 
-During `vite dev`, the plugin scans stylesheet source files for this import and warns if it cannot find one.
+This output strategy requires a physical, writable `node_modules` installation. Plug'n'Play package setups do not provide a package directory for the generated file and are not supported.
+
+During `vite dev`, the plugin scans stylesheet source files for `vite-plugin-google-fonts/fonts.css` and warns if it cannot find an import.
+
+## Options
 
 ### `cacheDir`
 
-The cache directory, relative to the Vite root unless absolute.
+The directory inside the installed plugin package used for downloaded font files and cache metadata. It must be a safe relative path and cannot escape the package directory.
 
-Default: `node_modules/.google-fonts`
+Default: `.cache`
 
-The cache contains one stylesheet per family, downloaded font files, and a manifest used for cache validation. The combined stylesheet is always written to `cssFile` in the workspace.
+```ts
+googleFonts({
+  cacheDir: 'generated-cache',
+  fonts: { Inter: {} },
+})
+```
 
 ### `base`
 
-The relative directory inside `cacheDir` where font files are stored. The generated stylesheet uses the correct relative path from `cssFile` to this directory.
+The relative directory inside `cacheDir` where font files are stored. The generated stylesheet uses the correct relative path from `fonts.css` to this directory.
 
 Default: `fonts`
 
 ```ts
 googleFonts({
-  cssFile: 'src/styles/fonts.css',
-  cacheDir: '.vite/google-fonts',
   base: 'assets/fonts',
   fonts: { Inter: {} },
 })

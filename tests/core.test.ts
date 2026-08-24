@@ -21,6 +21,7 @@ import * as fetchApi from '../src/fetch.js'
 import {
     generateFontCSS,
     processAllFonts,
+    resolveCacheDir,
     resolveFontBaseDir,
     validateGoogleFontsOptions,
 } from '../src/core.js'
@@ -68,6 +69,8 @@ describe('validateGoogleFontsOptions', () => {
         ['unsupported subsets', { fonts: { Agdasima: { subsets: ['cyrillic'] } } }, 'does not support subset'],
         ['unsupported weights', { optimizeWeights: false, fonts: { Agdasima: { weights: [500] } } }, 'does not support weight'],
         ['weights with optimization', { fonts: { Agdasima: { weights: [400] } } }, 'cannot specify "weights"'],
+        ['invalid cache directory', { cacheDir: '../cache', fonts: { Inter: {} } }, 'Invalid cache directory'],
+        ['invalid font base directory', { base: '../fonts', fonts: { Inter: {} } }, 'Invalid font base directory'],
     ] as const)('rejects %s', (_case, options, message) => {
         expect(() =>
             validateGoogleFontsOptions(
@@ -81,6 +84,7 @@ describe('resolveFontBaseDir', () => {
     it('normalizes the default and accepts safe relative paths', () => {
         expect(resolveFontBaseDir()).toBe('fonts')
         expect(resolveFontBaseDir('  assets\\fonts  ')).toBe('assets/fonts')
+        expect(resolveFontBaseDir('assets\\fonts\\')).toBe('assets/fonts')
         expect(resolveFontBaseDir('.')).toBe('fonts')
     })
 
@@ -89,6 +93,24 @@ describe('resolveFontBaseDir', () => {
         (base) => {
             expect(() => resolveFontBaseDir(base)).toThrow(
                 'Invalid font base directory',
+            )
+        },
+    )
+})
+
+describe('resolveCacheDir', () => {
+    it('normalizes the default and accepts safe relative paths', () => {
+        expect(resolveCacheDir()).toBe('.cache')
+        expect(resolveCacheDir('  generated\\fonts  ')).toBe('generated/fonts')
+        expect(resolveCacheDir('generated\\fonts\\')).toBe('generated/fonts')
+        expect(resolveCacheDir('.')).toBe('.cache')
+    })
+
+    it.each(['../cache', './cache', '/', '/cache', 'C:/cache', 'generated//fonts'])(
+        'rejects unsafe path %s',
+        (cacheDir) => {
+            expect(() => resolveCacheDir(cacheDir)).toThrow(
+                'Invalid cache directory',
             )
         },
     )
@@ -151,7 +173,6 @@ describe('generateFontCSS', () => {
 describe('processAllFonts', () => {
     const staticOptions: GoogleFontsPluginOptions = {
         optimizeWeights: false,
-        cacheDir: '.cache',
         base: 'assets/fonts',
         fonts: {
             Agdasima: {
@@ -246,7 +267,6 @@ describe('processAllFonts', () => {
 
         const firstOptions: GoogleFontsPluginOptions = {
             optimizeWeights: false,
-            cacheDir: '.cache',
             fonts: {
                 Inter: { subsets: ['latin'] },
                 Inter_Tight: { subsets: ['latin'] },

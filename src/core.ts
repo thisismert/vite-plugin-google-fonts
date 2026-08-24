@@ -14,7 +14,7 @@ import {
     fetchGoogleFontCSS,
 } from './fetch.js'
 
-export const DEFAULT_CACHE_DIR = 'node_modules/.google-fonts'
+export const DEFAULT_CACHE_DIR = '.cache'
 export const DEFAULT_FONT_BASE_DIR = 'fonts'
 
 const CACHE_VERSION = 1
@@ -235,11 +235,12 @@ export function validateGoogleFontsOptions(
         throw new Error('"optimizeWeights" must be a boolean.')
     }
 
-    if (
-        options.cssFile !== undefined &&
-        (typeof options.cssFile !== 'string' || !options.cssFile.trim())
-    ) {
-        throw new Error('Expected "cssFile" to be a non-empty string.')
+    if (options.cacheDir !== undefined) {
+        resolveCacheDir(options.cacheDir)
+    }
+
+    if (options.base !== undefined) {
+        resolveFontBaseDir(options.base)
     }
 
     if (
@@ -287,28 +288,60 @@ function toSlug(family: string): string {
         .replace(/^-|-$/g, '')
 }
 
-export function resolveFontBaseDir(base?: string): string {
-    const normalized = (base ?? DEFAULT_FONT_BASE_DIR)
+function resolveSafeRelativeDir(
+    value: string | undefined,
+    fallback: string,
+    label: string,
+): string {
+    if (value !== undefined && typeof value !== 'string') {
+        throw new Error(`Invalid ${label}: ${String(value)}`)
+    }
+
+    const normalized = (value ?? fallback)
         .trim()
         .replace(/\\/g, '/')
 
     if (!normalized || normalized === '.') {
-        return DEFAULT_FONT_BASE_DIR
+        return fallback
     }
 
-    const segments = normalized.split('/')
     if (
         normalized.startsWith('/') ||
-        /^[A-Za-z]:\//.test(normalized) ||
-        segments.some(
-            (segment) =>
-                segment === '' || segment === '.' || segment === '..',
-        )
+        /^[A-Za-z]:\//.test(normalized)
     ) {
-        throw new Error(`Invalid font base directory: ${base}`)
+        throw new Error(`Invalid ${label}: ${value}`)
     }
 
-    return normalized
+    const relativePath = normalized.replace(/\/+$/, '')
+
+    if (!relativePath || relativePath === '.') {
+        return fallback
+    }
+
+    const segments = relativePath.split('/')
+    if (segments.some(
+        (segment) => segment === '' || segment === '.' || segment === '..',
+    )) {
+        throw new Error(`Invalid ${label}: ${value}`)
+    }
+
+    return relativePath
+}
+
+export function resolveCacheDir(cacheDir?: string): string {
+    return resolveSafeRelativeDir(
+        cacheDir,
+        DEFAULT_CACHE_DIR,
+        'cache directory',
+    )
+}
+
+export function resolveFontBaseDir(base?: string): string {
+    return resolveSafeRelativeDir(
+        base,
+        DEFAULT_FONT_BASE_DIR,
+        'font base directory',
+    )
 }
 
 function contentHash(content: Buffer): string {
@@ -447,11 +480,11 @@ function createDownloadedFamily(
 
 export async function processAllFonts(
     options: GoogleFontsPluginOptions,
-    root: string,
+    packageRoot: string,
     log: (message: string) => void,
     context: { usedStaticWeights?: readonly string[] } = {},
 ): Promise<DownloadedFamily[]> {
-    const cacheDir = path.resolve(root, options.cacheDir ?? DEFAULT_CACHE_DIR)
+    const cacheDir = path.resolve(packageRoot, resolveCacheDir(options.cacheDir))
     const fontBaseDir = resolveFontBaseDir(options.base)
     const fontsDir = path.join(cacheDir, fontBaseDir)
     const manifestFile = path.join(cacheDir, 'meta.json')

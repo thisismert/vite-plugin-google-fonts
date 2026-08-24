@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { type Plugin, type ResolvedConfig } from 'vite'
@@ -8,15 +9,19 @@ import type {
     GoogleFontsPluginOptions,
 } from './types.js'
 import {
-    DEFAULT_CACHE_DIR,
     generateFontCSS,
     processAllFonts,
+    resolveCacheDir,
     resolveFontBaseDir,
     validateGoogleFontsOptions,
 } from './core.js'
 import { detectUsedStaticWeights, hasStylesheetImport } from './weights.js'
+import {
+    GENERATED_CSS_FILE_NAME,
+    GENERATED_CSS_IMPORT,
+    getPackageRoot,
+} from './package-paths.js'
 
-const DEFAULT_CSS_FILE = 'src/generated/fonts.css'
 const resolveFromPlugin = createRequire(import.meta.url)
 
 function isTailwindInstalled(root: string): boolean {
@@ -32,15 +37,86 @@ function toPosixPath(value: string): string {
     return value.split(path.sep).join('/')
 }
 
-function resolveCssFile(root: string, cssFile: string | undefined): string {
-    const value = cssFile?.trim() || DEFAULT_CSS_FILE
-    const resolved = path.resolve(root, value)
-
-    if (path.extname(resolved).toLowerCase() !== '.css') {
-        throw new Error(`Generated CSS file must use the .css extension: ${value}`)
+function errorCode(error: unknown): string | undefined {
+    if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        typeof error.code === 'string'
+    ) {
+        return error.code
     }
 
-    return resolved
+    return undefined
+}
+
+function canRetryGeneratedCSSReplacement(error: unknown): boolean {
+    return ['EEXIST', 'EPERM', 'ENOTEMPTY', 'EXDEV'].includes(errorCode(error) ?? '')
+}
+
+function replaceGeneratedCSS(
+    temporaryPath: string,
+    filePath: string,
+): void {
+    try {
+        fs.renameSync(temporaryPath, filePath)
+        return
+    } catch (error) {
+        if (!canRetryGeneratedCSSReplacement(error)) {
+            throw error
+        }
+    }
+
+    const hasExistingFile = fs.existsSync(filePath)
+    const backupPath = hasExistingFile
+        ? `${filePath}.${randomUUID()}.bak`
+        : undefined
+
+    if (backupPath) {
+        fs.renameSync(filePath, backupPath)
+    }
+
+    try {
+        try {
+            fs.renameSync(temporaryPath, filePath)
+        } catch (error) {
+            if (errorCode(error) !== 'EXDEV') {
+                throw error
+            }
+
+            fs.copyFileSync(temporaryPath, filePath)
+            fs.unlinkSync(temporaryPath)
+        }
+    } catch (error) {
+        if (backupPath) {
+            if (fs.existsSync(filePath)) {
+                fs.rmSync(filePath, { force: true })
+            }
+            fs.renameSync(backupPath, filePath)
+        }
+
+        throw error
+    }
+
+    if (backupPath && fs.existsSync(backupPath)) {
+        fs.rmSync(backupPath, { force: true })
+    }
+}
+
+function writeGeneratedCSS(filePath: string, content: string): void {
+    const temporaryPath = `${filePath}.${randomUUID()}.tmp`
+
+    try {
+        fs.writeFileSync(temporaryPath, content)
+
+        // Replacing the directory entry avoids modifying a packaged placeholder that may be hard-linked by pnpm.
+        replaceGeneratedCSS(temporaryPath, filePath)
+    } catch (error) {
+        if (fs.existsSync(temporaryPath)) {
+            fs.rmSync(temporaryPath, { force: true })
+        }
+        throw error
+    }
 }
 
 function resolveFontBasePath(
@@ -98,10 +174,14 @@ export default function googleFonts(
         },
 
         async buildStart() {
-            const cssFilePath = resolveCssFile(root, options.cssFile)
+            const packageRoot = getPackageRoot(root)
+            const cssFilePath = path.join(
+                packageRoot,
+                GENERATED_CSS_FILE_NAME,
+            )
             const cacheDir = path.resolve(
-                root,
-                options.cacheDir ?? DEFAULT_CACHE_DIR,
+                packageRoot,
+                resolveCacheDir(options.cacheDir),
             )
             const shouldScanWeights =
                 config.command === 'build' &&
@@ -122,7 +202,7 @@ export default function googleFonts(
             logInfo('Loading fonts...')
             const downloadedFamilies = await processAllFonts(
                 options,
-                root,
+                packageRoot,
                 logInfo,
                 { usedStaticWeights },
             )
@@ -135,7 +215,7 @@ export default function googleFonts(
             )
 
             fs.mkdirSync(path.dirname(cssFilePath), { recursive: true })
-            fs.writeFileSync(cssFilePath, fontCSS)
+            writeGeneratedCSS(cssFilePath, fontCSS)
 
             logInfo(
                 `Generated ${toPosixPath(path.relative(root, cssFilePath))}`,
@@ -146,11 +226,14 @@ export default function googleFonts(
                 !hasShownImportNotice &&
                 !hasStylesheetImport(root, cssFilePath, {
                     ignoredPaths: [cacheDir, cssFilePath],
+                    importSpecifierTargets: {
+                        [GENERATED_CSS_IMPORT]: cssFilePath,
+                    },
                 })
             ) {
                 hasShownImportNotice = true
                 logWarning(
-                    `Generated stylesheet is not imported: ${toPosixPath(path.relative(root, cssFilePath))}. Add it to your application's CSS entry file.`,
+                    `Generated stylesheet is not imported: ${GENERATED_CSS_IMPORT}. Add it to your application's CSS entry file.`,
                 )
             }
         },

@@ -8,10 +8,12 @@
     ".": {
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
-    }
+    },
+    "./fonts.css": "./fonts.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "fonts.css"
   ],
   "scripts": {
     "build": "tsdown",

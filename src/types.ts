@@ -82,16 +82,11 @@ export type FontMap<TOptimize extends boolean = false> = Partial<{
 
 type SharedPluginOptions = {
     /**
-     * Directory to cache downloaded font files (relative to project root).
-     * @default 'node_modules/.google-fonts'
+     * Directory inside the installed package used for downloaded font files and generated cache data.
+     * Must be a safe relative path and cannot escape the package directory.
+     * @default '.cache'
      */
     cacheDir?: string
-
-    /**
-     * Workspace-relative path for the generated stylesheet.
-     * @default 'src/generated/google-fonts.css'
-     */
-    cssFile?: string
 
     /**
      * Relative directory under `cacheDir` used for downloaded font files and generated CSS URLs.

@@ -61,6 +61,67 @@ const classes = 'font-bold font-900'
 })
 
 describe('hasStylesheetImport', () => {
+    it.skipIf(process.platform === 'win32')(
+        'resolves aliased imports through a symlinked package path',
+        () => {
+            const importer = path.join(root, 'src', 'index.css')
+            const packageTarget = path.join(
+                root,
+                '.pnpm/vite-plugin-google-fonts/node_modules/vite-plugin-google-fonts',
+            )
+            const packageLink = path.join(
+                root,
+                'node_modules/vite-plugin-google-fonts',
+            )
+            const targetFile = path.join(packageTarget, 'fonts.css')
+            const linkedTargetFile = path.join(packageLink, 'fonts.css')
+
+            fs.mkdirSync(path.dirname(importer), { recursive: true })
+            fs.mkdirSync(packageTarget, { recursive: true })
+            fs.mkdirSync(path.dirname(packageLink), { recursive: true })
+            fs.writeFileSync(targetFile, '')
+            fs.symlinkSync(packageTarget, packageLink, 'dir')
+            fs.writeFileSync(
+                importer,
+                '@import "vite-plugin-google-fonts/fonts.css";',
+            )
+
+            expect(
+                hasStylesheetImport(root, targetFile, {
+                    importSpecifierTargets: {
+                        'vite-plugin-google-fonts/fonts.css': linkedTargetFile,
+                    },
+                }),
+            ).toBe(true)
+        },
+    )
+
+    it('only accepts an aliased import when it targets the requested file', () => {
+        const importer = path.join(root, 'src', 'index.css')
+        const target = path.join(root, 'node_modules', 'vite-plugin-google-fonts', 'fonts.css')
+        const otherTarget = path.join(root, 'node_modules', 'other-package', 'fonts.css')
+        fs.mkdirSync(path.dirname(importer), { recursive: true })
+        fs.writeFileSync(
+            importer,
+            '@import "vite-plugin-google-fonts/fonts.css";',
+        )
+
+        expect(
+            hasStylesheetImport(root, target, {
+                importSpecifierTargets: {
+                    'vite-plugin-google-fonts/fonts.css': target,
+                },
+            }),
+        ).toBe(true)
+        expect(
+            hasStylesheetImport(root, target, {
+                importSpecifierTargets: {
+                    'vite-plugin-google-fonts/fonts.css': otherTarget,
+                },
+            }),
+        ).toBe(false)
+    })
+
     it('resolves relative imports with query strings', () => {
         const importer = path.join(root, 'src', 'index.css')
         const target = path.join(root, 'src', 'generated', 'fonts.css')

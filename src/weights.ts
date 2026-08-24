@@ -59,6 +59,16 @@ const STYLESHEET_EXTENSIONS = new Set([
 
 const CSS_IMPORT_PATTERN = /@import\s+(?:url\(\s*)?(?:"([^"]+)"|'([^']+)'|([^\s);]+))\s*\)?/g
 
+function canonicalPath(value: string): string {
+    const resolved = path.resolve(value)
+
+    try {
+        return fs.realpathSync(resolved)
+    } catch {
+        return resolved
+    }
+}
+
 function normalizeWeightToken(token: string): string | null {
     const lower = token.toLowerCase()
 
@@ -175,9 +185,19 @@ function importResolvesToFile(
     specifier: string,
     root: string,
     targetFile: string,
+    importSpecifierTargets: Readonly<Record<string, string>>,
 ): boolean {
     const cleanSpecifier = specifier.split(/[?#]/, 1)[0]
-    const targetRelativePath = path.relative(root, targetFile).split(path.sep).join('/')
+    const importTarget = importSpecifierTargets[cleanSpecifier]
+
+    if (importTarget !== undefined) {
+        return canonicalPath(importTarget) === targetFile
+    }
+
+    const targetRelativePath = path.relative(
+        canonicalPath(root),
+        targetFile,
+    ).split(path.sep).join('/')
 
     if (cleanSpecifier === targetRelativePath) {
         return true
@@ -193,7 +213,7 @@ function importResolvesToFile(
             ? path.resolve(path.dirname(importer), cleanSpecifier)
             : path.resolve(root, cleanSpecifier)
 
-    return resolvedSpecifier === targetFile
+    return canonicalPath(resolvedSpecifier) === targetFile
 }
 
 export function hasStylesheetImport(
@@ -201,11 +221,13 @@ export function hasStylesheetImport(
     targetFile: string,
     options?: {
         ignoredPaths?: string[]
+        importSpecifierTargets?: Readonly<Record<string, string>>
     },
 ): boolean {
     const files: string[] = []
     const ignoredPaths = new Set((options?.ignoredPaths ?? []).map((value) => path.resolve(value)))
-    const resolvedTargetFile = path.resolve(targetFile)
+    const importSpecifierTargets = options?.importSpecifierTargets ?? {}
+    const resolvedTargetFile = canonicalPath(targetFile)
 
     collectCandidateFiles(root, files, ignoredPaths)
 
@@ -223,7 +245,13 @@ export function hasStylesheetImport(
 
         for (const match of content.matchAll(CSS_IMPORT_PATTERN)) {
             const specifier = match[1] ?? match[2] ?? match[3]
-            if (importResolvesToFile(file, specifier, path.resolve(root), resolvedTargetFile)) {
+            if (importResolvesToFile(
+                file,
+                specifier,
+                canonicalPath(root),
+                resolvedTargetFile,
+                importSpecifierTargets,
+            )) {
                 return true
             }
         }
