@@ -11,8 +11,6 @@ import type {
 import {
     generateFontCSS,
     processAllFonts,
-    resolveCacheDir,
-    resolveFontBaseDir,
     validateGoogleFontsOptions,
 } from './core.js'
 import { detectUsedStaticWeights, hasStylesheetImport } from './weights.js'
@@ -119,12 +117,10 @@ function writeGeneratedCSS(filePath: string, content: string): void {
     }
 }
 
-function resolveFontBasePath(
+function resolveFontPath(
     cssFilePath: string,
-    cacheDir: string,
-    fontBaseDir: string,
+    fontsDir: string,
 ): string {
-    const fontsDir = path.join(cacheDir, fontBaseDir)
     const relativePath = toPosixPath(
         path.relative(path.dirname(cssFilePath), fontsDir),
     )
@@ -179,17 +175,15 @@ export default function googleFonts(
                 packageRoot,
                 GENERATED_CSS_FILE_NAME,
             )
-            const cacheDir = path.resolve(
-                packageRoot,
-                resolveCacheDir(options.cacheDir),
-            )
+            const cacheRoot = path.join(packageRoot, '.cache')
+            const fontsDir = path.join(cacheRoot, 'fonts')
             const shouldScanWeights =
                 config.command === 'build' &&
                 options.optimizeWeights !== false &&
                 hasStaticFontFamily(options.fonts)
             const usedStaticWeights = shouldScanWeights
                 ? detectUsedStaticWeights(root, {
-                    ignoredPaths: [cacheDir, cssFilePath],
+                    ignoredPaths: [cacheRoot, cssFilePath],
                 })
                 : undefined
 
@@ -207,10 +201,9 @@ export default function googleFonts(
                 { usedStaticWeights },
             )
 
-            const fontBaseDir = resolveFontBaseDir(options.base)
             const fontCSS = generateFontCSS(
                 downloadedFamilies,
-                resolveFontBasePath(cssFilePath, cacheDir, fontBaseDir),
+                resolveFontPath(cssFilePath, fontsDir),
                 tailwindInstalled,
             )
 
@@ -225,7 +218,7 @@ export default function googleFonts(
                 config.command === 'serve' &&
                 !hasShownImportNotice &&
                 !hasStylesheetImport(root, cssFilePath, {
-                    ignoredPaths: [cacheDir, cssFilePath],
+                    ignoredPaths: [cacheRoot, cssFilePath],
                     importSpecifierTargets: {
                         [GENERATED_CSS_IMPORT]: cssFilePath,
                     },

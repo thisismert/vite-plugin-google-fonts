@@ -21,8 +21,6 @@ import * as fetchApi from '../src/fetch.js'
 import {
     generateFontCSS,
     processAllFonts,
-    resolveCacheDir,
-    resolveFontBaseDir,
     validateGoogleFontsOptions,
 } from '../src/core.js'
 
@@ -69,8 +67,6 @@ describe('validateGoogleFontsOptions', () => {
         ['unsupported subsets', { fonts: { Agdasima: { subsets: ['cyrillic'] } } }, 'does not support subset'],
         ['unsupported weights', { optimizeWeights: false, fonts: { Agdasima: { weights: [500] } } }, 'does not support weight'],
         ['weights with optimization', { fonts: { Agdasima: { weights: [400] } } }, 'cannot specify "weights"'],
-        ['invalid cache directory', { cacheDir: '../cache', fonts: { Inter: {} } }, 'Invalid cache directory'],
-        ['invalid font base directory', { base: '../fonts', fonts: { Inter: {} } }, 'Invalid font base directory'],
     ] as const)('rejects %s', (_case, options, message) => {
         expect(() =>
             validateGoogleFontsOptions(
@@ -80,42 +76,6 @@ describe('validateGoogleFontsOptions', () => {
     })
 })
 
-describe('resolveFontBaseDir', () => {
-    it('normalizes the default and accepts safe relative paths', () => {
-        expect(resolveFontBaseDir()).toBe('fonts')
-        expect(resolveFontBaseDir('  assets\\fonts  ')).toBe('assets/fonts')
-        expect(resolveFontBaseDir('assets\\fonts\\')).toBe('assets/fonts')
-        expect(resolveFontBaseDir('.')).toBe('fonts')
-    })
-
-    it.each(['../fonts', './fonts', '/fonts', 'C:/fonts', 'assets//fonts'])(
-        'rejects unsafe path %s',
-        (base) => {
-            expect(() => resolveFontBaseDir(base)).toThrow(
-                'Invalid font base directory',
-            )
-        },
-    )
-})
-
-describe('resolveCacheDir', () => {
-    it('normalizes the default and accepts safe relative paths', () => {
-        expect(resolveCacheDir()).toBe('.cache')
-        expect(resolveCacheDir('  generated\\fonts  ')).toBe('generated/fonts')
-        expect(resolveCacheDir('generated\\fonts\\')).toBe('generated/fonts')
-        expect(resolveCacheDir('.')).toBe('.cache')
-    })
-
-    it.each(['../cache', './cache', '/', '/cache', 'C:/cache', 'generated//fonts'])(
-        'rejects unsafe path %s',
-        (cacheDir) => {
-            expect(() => resolveCacheDir(cacheDir)).toThrow(
-                'Invalid cache directory',
-            )
-        },
-    )
-})
-
 describe('generateFontCSS', () => {
     it('rewrites font paths and emits canonical, custom, and theme variables', () => {
         const css = generateFontCSS(
@@ -123,14 +83,14 @@ describe('generateFontCSS', () => {
                 {
                     family: 'Inter',
                     slug: 'inter',
-                    css: '@font-face { src: url(__FONT_BASE__inter.woff2); }',
+                    css: '@font-face { src: url(__FONT_PATH__inter.woff2); }',
                     variable: '--font-sans',
                     fallback: 'system-ui, sans-serif',
                 },
                 {
                     family: 'JetBrains Mono',
                     slug: 'jetbrains-mono',
-                    css: '@font-face { src: url(__FONT_BASE__mono.woff2); }',
+                    css: '@font-face { src: url(__FONT_PATH__mono.woff2); }',
                     variable: '--font-mono',
                     fallback: 'ui-monospace, monospace',
                 },
@@ -173,7 +133,6 @@ describe('generateFontCSS', () => {
 describe('processAllFonts', () => {
     const staticOptions: GoogleFontsPluginOptions = {
         optimizeWeights: false,
-        base: 'assets/fonts',
         fonts: {
             Agdasima: {
                 weights: [400],
@@ -196,7 +155,7 @@ describe('processAllFonts', () => {
 
         const log = vi.fn()
         const first = await processAllFonts(staticOptions, root, log)
-        const fontsDir = path.join(root, '.cache', 'assets/fonts')
+        const fontsDir = path.join(root, '.cache', 'fonts')
         const cachedFiles = fs.readdirSync(fontsDir)
         const expectedHash = crypto
             .createHash('sha256')
@@ -206,7 +165,7 @@ describe('processAllFonts', () => {
 
         expect(first).toHaveLength(1)
         expect(first[0].css).toContain(
-            `__FONT_BASE__agdasima-latin-${expectedHash}.woff2`,
+            `__FONT_PATH__agdasima-latin-${expectedHash}.woff2`,
         )
         expect(first[0].css).not.toContain('cyrillic')
         expect(cachedFiles).toEqual([

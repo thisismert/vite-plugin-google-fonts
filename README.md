@@ -78,32 +78,6 @@ During `vite dev`, the plugin scans stylesheet source files for `vite-plugin-goo
 
 ## Options
 
-### `cacheDir`
-
-The directory inside the installed plugin package used for downloaded font files and cache metadata. It must be a safe relative path and cannot escape the package directory.
-
-Default: `.cache`
-
-```ts
-googleFonts({
-  cacheDir: 'generated-cache',
-  fonts: { Inter: {} },
-})
-```
-
-### `base`
-
-The relative directory inside `cacheDir` where font files are stored. The generated stylesheet uses the correct relative path from `fonts.css` to this directory.
-
-Default: `fonts`
-
-```ts
-googleFonts({
-  base: 'assets/fonts',
-  fonts: { Inter: {} },
-})
-```
-
 ### `optimizeWeights`
 
 Default: `true`

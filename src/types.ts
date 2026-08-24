@@ -80,34 +80,19 @@ export type FontMap<TOptimize extends boolean = false> = Partial<{
     [K in GoogleFontFamily]: FontFamilyOptions<K, TOptimize>
 }>
 
-type SharedPluginOptions = {
-    /**
-     * Directory inside the installed package used for downloaded font files and generated cache data.
-     * Must be a safe relative path and cannot escape the package directory.
-     * @default '.cache'
-     */
-    cacheDir?: string
-
-    /**
-     * Relative directory under `cacheDir` used for downloaded font files and generated CSS URLs.
-     * @default 'fonts'
-     */
-    base?: string
-}
-
 export type GoogleFontsPluginOptions =
-    | (SharedPluginOptions & {
+    | {
         /**
          * During build, limit static downloads to weights found in the project.
          * @default true
          */
         optimizeWeights?: true
         fonts: FontMap<true>
-    })
-    | (SharedPluginOptions & {
+    }
+    | {
         /**
          * Disable automatic static-weight optimization and control weights manually.
          */
         optimizeWeights: false
         fonts: FontMap<false>
-    })
+    }

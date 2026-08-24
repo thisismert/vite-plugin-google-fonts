@@ -106,11 +106,9 @@ async function runBuildStart(
 }
 
 describe('googleFontsPlugin', () => {
-    it('generates the package stylesheet and uses its relative font base', async () => {
+    it('generates the package stylesheet and uses its relative font path', async () => {
         const logger = { info: vi.fn(), warn: vi.fn() }
         const options: GoogleFontsPluginOptions = {
-            cacheDir: 'font-cache',
-            base: 'assets/fonts',
             fonts: { Inter: { variable: '--font-sans' } },
         }
         fs.mkdirSync(path.join(root, 'src'), { recursive: true })
@@ -128,10 +126,10 @@ describe('googleFontsPlugin', () => {
 
         expect(plugin.name).toBe('google-fonts')
         expect(plugin.enforce).toBe('pre')
-        expect(generatedCSS).toContain('font-cache/assets/fonts/inter-')
+        expect(generatedCSS).toContain('.cache/fonts/inter-')
         expect(generatedCSS).toContain("--font-sans: 'Inter', system-ui, sans-serif;")
         expect(generatedCSS).not.toContain('@theme inline')
-        expect(fs.existsSync(path.join(packageRoot, 'font-cache', 'meta.json'))).toBe(true)
+        expect(fs.existsSync(path.join(packageRoot, '.cache', 'meta.json'))).toBe(true)
         expect(fs.existsSync(path.join(root, 'src/generated/fonts.css'))).toBe(false)
         expect(fs.existsSync(path.join(root, 'fonts.css'))).toBe(false)
         expect(logger.info).toHaveBeenCalledWith(
