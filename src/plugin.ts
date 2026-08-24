@@ -69,7 +69,7 @@ function hasStaticFontFamily(fonts: GoogleFontsPluginOptions['fonts']): boolean 
     })
 }
 
-export default function googleFontsPlugin(
+export default function googleFonts(
     options: GoogleFontsPluginOptions,
 ): Plugin[] {
     validateGoogleFontsOptions(options)

@@ -1,6 +1,6 @@
-import googleFontsPlugin from './plugin.js'
+import googleFonts from './plugin.js'
 
-export default googleFontsPlugin
+export default googleFonts
 export {
     googleFontFamilies,
     isGoogleFontFamily,
