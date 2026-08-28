@@ -226,7 +226,7 @@ export default function googleFonts(
             ) {
                 hasShownImportNotice = true
                 logWarning(
-                    `Generated stylesheet is not imported: ${GENERATED_CSS_IMPORT}. Add it to your application's CSS entry file.`,
+                    `Generated stylesheet is not imported: ${GENERATED_CSS_IMPORT}. Import it on your application's CSS entry file.`,
                 )
             }
         },
