@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-google-fonts",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Self-host Google Fonts in Vite with local CSS, cached font assets, CSS variables, and Tailwind theme mappings.",
   "type": "module",
   "types": "./dist/index.d.mts",
